@@ -40,7 +40,8 @@
             },
             "args": ["qemu"],
             "cwd": "${workspaceFolder}", 
-            "env": {"RUST_LOG": "info"}
+            "env": {"RUST_LOG": "info"}, 
+            
         },
         {
             "type": "lldb",

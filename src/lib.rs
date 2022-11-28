@@ -9,12 +9,14 @@ pub mod exporters;
 pub mod sensors;
 use clap::ArgMatches;
 use colored::*;
+use exporters::VMconfiguration;
 use exporters::{
-    json::JSONExporter, prometheus::PrometheusExporter, qemu::QemuExporter,
-    riemann::RiemannExporter, stdout::StdoutExporter, warpten::Warp10Exporter, Exporter,
+    qemu::QemuExporter, Exporter
 };
 use sensors::{powercap_rapl::PowercapRAPLSensor, Sensor};
 use std::collections::HashMap;
+use std::io::{prelude::*, BufReader};
+use std::net::{TcpListener};
 use std::time::{Duration, SystemTime};
 
 /// Helper function to get an argument from ArgMatches
@@ -55,90 +57,77 @@ fn get_sensor(matches: &ArgMatches) -> Box<dyn Sensor> {
 /// the choosen exporter: run()
 /// This function should be updated to take new exporters into account.
 pub fn run(matches: ArgMatches) {
-    loggerv::init_with_verbosity(matches.occurrences_of("v")).unwrap();
-
-    let sensor_boxed = get_sensor(&matches);
-    let exporter_parameters;
+//    loggerv::init_with_verbosity(matches.occurrences_of("v")).unwrap();
 
     let mut header = true;
     if matches.is_present("no-header") {
         header = false;
     }
 
-    if let Some(stdout_exporter_parameters) = matches.subcommand_matches("stdout") {
-        if header {
-            scaphandre_header("stdout");
-        }
-        exporter_parameters = stdout_exporter_parameters.clone();
-        let mut exporter = StdoutExporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
-    } else if let Some(json_exporter_parameters) = matches.subcommand_matches("json") {
-        if header {
-            scaphandre_header("json");
-        }
-        exporter_parameters = json_exporter_parameters.clone();
-        let mut exporter = JSONExporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
-    } else if let Some(riemann_exporter_parameters) = matches.subcommand_matches("riemann") {
-        if header {
-            scaphandre_header("riemann");
-        }
-        exporter_parameters = riemann_exporter_parameters.clone();
-        let mut exporter = RiemannExporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
-    } else if let Some(prometheus_exporter_parameters) = matches.subcommand_matches("prometheus") {
-        if header {
-            scaphandre_header("prometheus");
-        }
-        exporter_parameters = prometheus_exporter_parameters.clone();
-        let mut exporter = PrometheusExporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
-    } else if let Some(qemu_exporter_parameters) = matches.subcommand_matches("qemu") {
-        if header {
-            scaphandre_header("qemu");
-        }
+    let sensor_boxed = get_sensor(&matches);
+
+    if header {
+        scaphandre_header("qemu");
+    }
+
+    let configurations = [
+        VMconfiguration{host_name: String::from("small"), vcpu: 4, ram: 2048}
+        ];
+
+    let exporter_parameters;
+    if let Some(qemu_exporter_parameters) = matches.subcommand_matches("qemu") {
         exporter_parameters = qemu_exporter_parameters.clone();
-        let mut exporter = QemuExporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
-    } else if let Some(warp10_exporter_parameters) = matches.subcommand_matches("warp10") {
-        if header {
-            scaphandre_header("warp10");
-        }
-        exporter_parameters = warp10_exporter_parameters.clone();
-        let mut exporter = Warp10Exporter::new(sensor_boxed);
-        exporter.run(exporter_parameters);
     } else {
-        error!("Couldn't determine which exporter has been chosen.");
+        exporter_parameters = ArgMatches::default();
+    }
+
+    let exporter = &mut QemuExporter::new(sensor_boxed);
+
+    let listener = TcpListener::bind("0.0.0.0:4444").unwrap();
+
+    
+
+    for configuration in configurations {
+
+        let mut stream = listener.accept().unwrap().0;
+
+        info!("Connection established\n");
+        loop {
+            let mut buf_reader = BufReader::new(&mut stream);
+            let mut read_line = String::new();
+            buf_reader.read_line(&mut read_line).unwrap();
+            debug!("received: {}\n", read_line);
+        
+            if read_line.eq("finished recording\n") {
+                print!("finished testing");
+                break;
+            } else if read_line.eq("startTestReq\n") {
+                info!("start recording\n");
+
+                stream.write(b"ack\n").unwrap();
+                stream.flush().unwrap();
+
+                exporter.run(&exporter_parameters, &configuration);
+                //record_vm(exporter, &configuration, exporter_parameters.clone());
+
+                stream.write(b"fin\n").unwrap();
+                stream.flush().unwrap();
+            } else {
+                panic!("recieved wrong package");
+            }
+        }
     }
 }
+
+
 
 /// Returns options needed for each exporter as a HashMap.
 /// This function has to be updated to enable a new exporter.
 pub fn get_exporters_options() -> HashMap<String, Vec<clap::Arg<'static, 'static>>> {
     let mut options = HashMap::new();
     options.insert(
-        String::from("stdout"),
-        exporters::stdout::StdoutExporter::get_options(),
-    );
-    options.insert(
-        String::from("json"),
-        exporters::json::JSONExporter::get_options(),
-    );
-    options.insert(
-        String::from("prometheus"),
-        exporters::prometheus::PrometheusExporter::get_options(),
-    );
-    options.insert(
-        String::from("riemann"),
-        exporters::riemann::RiemannExporter::get_options(),
-    );
-    options.insert(
         String::from("qemu"),
         exporters::qemu::QemuExporter::get_options(),
-    );
-    options.insert(
-        String::from("warp10"),
-        exporters::warpten::Warp10Exporter::get_options(),
     );
     options
 }

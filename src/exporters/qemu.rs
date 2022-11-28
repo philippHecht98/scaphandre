@@ -2,6 +2,8 @@ use crate::exporters::Exporter;
 use crate::sensors::{utils::ProcessRecord, Sensor, Topology};
 use std::{fs, io, thread, time};
 
+use super::VMconfiguration;
+
 /// An Exporter that extracts power consumption data of running
 /// Qemu/KVM virtual machines on the host and store those data
 /// as folders and files that are supposed to be mounted on the
@@ -12,12 +14,21 @@ pub struct QemuExporter {
     topology: Topology,
 }
 
+/*
+pub fn record_vm(qemu_exporter: &mut QemuExporter, 
+        configuration: &VMconfiguration, 
+        exporter_parameters: clap::ArgMatches) {
+    qemu_exporter.run(exporter_parameters.clone());
+    
+}
+ */
+
 impl Exporter for QemuExporter {
     /// Runs iteration() in a loop.
-    fn run(&mut self, _parameters: clap::ArgMatches) {
+    fn run(&mut self, _parameters: &clap::ArgMatches, configuration: &VMconfiguration) {
         info!("Starting qemu exporter");
         let path = "/var/lib/libvirt/scaphandre";
-        let cleaner_step = 120;
+        let cleaner_step = 30;
         let mut timer = time::Duration::from_secs(cleaner_step);
         loop {
             self.iteration(String::from(path));
@@ -26,10 +37,12 @@ impl Exporter for QemuExporter {
             if timer - step > time::Duration::from_millis(0) {
                 timer -= step;
             } else {
+                debug!("store data");
                 self.topology
                     .proc_tracker
                     .clean_terminated_process_records_vectors();
                 timer = time::Duration::from_secs(cleaner_step);
+                break;
             }
         }
     }
@@ -44,7 +57,7 @@ impl QemuExporter {
     pub fn new(mut sensor: Box<dyn Sensor>) -> QemuExporter {
         let some_topology = *sensor.get_topology();
         QemuExporter {
-            topology: some_topology.unwrap(),
+            topology: some_topology.unwrap()
         }
     }
 
@@ -64,12 +77,13 @@ impl QemuExporter {
                 qemu_processes.len()
             );
             for qp in qemu_processes {
-                info!("Working on {:?}", qp);
+                //info!("Working on {:?}", qp);
                 if qp.len() > 2 {
                     let last = qp.first().unwrap();
                     let previous = qp.get(1).unwrap();
                     let vm_name =
                         QemuExporter::get_vm_name_from_cmdline(&last.process.cmdline().unwrap());
+                    info!("Working on {:?}", vm_name);
                     let time_pdiff = last.total_time_jiffies() - previous.total_time_jiffies();
                     if let Some(time_tdiff) = &topo_stat_diff {
                         let first_domain_path = format!("{}/{}/intel-rapl:0:0", path, vm_name);
@@ -79,11 +93,12 @@ impl QemuExporter {
                                 Err(error) => panic!("Couldn't create {}. Got: {}", &path, error),
                             }
                         }
+                        // TODO: fix againt by using u64f
                         let tdiff = time_tdiff.total_time_jiffies();
                         trace!("Time_pdiff={} time_tdiff={}", time_pdiff.to_string(), tdiff);
-                        let ratio = time_pdiff / tdiff;
+                        let ratio = (time_pdiff as f64) / (tdiff as f64);
                         trace!("Ratio is {}", ratio.to_string());
-                        let uj_to_add = ratio * topo_rec_uj.value.parse::<u64>().unwrap();
+                        let uj_to_add = ratio * topo_rec_uj.value.parse::<f64>().unwrap();
                         trace!("Adding {} uJ", uj_to_add);
                         let complete_path = format!("{}/{}/intel-rapl:0", path, vm_name);
                         if let Ok(result) =
@@ -92,6 +107,7 @@ impl QemuExporter {
                             trace!("{:?}", result);
                             debug!("Updated {}", complete_path);
                         }
+                        //self.recording_hosts.entry(vm_name).and_modify(|uj_value| *uj_value += uj_to_add);
                     }
                 }
             }
@@ -135,6 +151,7 @@ impl QemuExporter {
     fn filter_qemu_vm_processes(processes: &[&Vec<ProcessRecord>]) -> Vec<Vec<ProcessRecord>> {
         let mut qemu_processes: Vec<Vec<ProcessRecord>> = vec![];
         trace!("Got {} processes to filter.", processes.len());
+        // TODO: check for cmd line hostname and compare with keyset
         for vecp in processes.iter() {
             if !vecp.is_empty() {
                 if let Some(pr) = vecp.get(0) {

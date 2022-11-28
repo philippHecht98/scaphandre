@@ -1,7 +1,9 @@
 //! Generic sensor and transmission agent for energy consumption related metrics.
 use clap::{crate_authors, crate_version, App, AppSettings, Arg, SubCommand};
 use scaphandre::{get_exporters_options, run};
+
 fn main() {
+    env_logger::init();
     let sensors = ["powercap_rapl"];
     let exporters_options = get_exporters_options();
     let exporters = exporters_options.keys();

@@ -2,13 +2,8 @@
 //!
 //! `Exporter` is the root for all exporters. It defines the [Exporter] trait
 //! needed to implement an exporter.
-pub mod json;
-pub mod prometheus;
 pub mod qemu;
-pub mod riemann;
-pub mod stdout;
 pub mod utils;
-pub mod warpten;
 use crate::sensors::{utils::current_system_time_since_epoch, RecordGenerator, Topology};
 use chrono::Utc;
 use clap::ArgMatches;
@@ -81,6 +76,12 @@ impl fmt::Debug for MetricValueType {
     }
 }
 
+pub struct VMconfiguration {
+    pub host_name: String, 
+    pub vcpu: u64, 
+    pub ram: u64
+}
+
 /// An Exporter is what tells scaphandre when to collect metrics and how to export
 /// or expose them.
 /// Its basic role is to instanciate a Sensor, get the data the sensor has to offer
@@ -91,7 +92,7 @@ impl fmt::Debug for MetricValueType {
 /// with the structs provided by the sensor.
 pub trait Exporter {
     /// Entry point for all Exporters
-    fn run(&mut self, parameters: ArgMatches);
+    fn run(&mut self, parameters: &ArgMatches, configuration: &VMconfiguration);
     /// Get the options passed via the command line
     fn get_options() -> Vec<clap::Arg<'static, 'static>>;
 }
