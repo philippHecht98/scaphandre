@@ -2,8 +2,6 @@ use crate::exporters::Exporter;
 use crate::sensors::{utils::ProcessRecord, Sensor, Topology};
 use std::{fs, io, thread, time};
 
-use super::VMconfiguration;
-
 /// An Exporter that extracts power consumption data of running
 /// Qemu/KVM virtual machines on the host and store those data
 /// as folders and files that are supposed to be mounted on the
@@ -25,13 +23,15 @@ pub fn record_vm(qemu_exporter: &mut QemuExporter,
 
 impl Exporter for QemuExporter {
     /// Runs iteration() in a loop.
-    fn run(&mut self, _parameters: &clap::ArgMatches, configuration: &VMconfiguration) {
+    fn run(&mut self, _parameters: &clap::ArgMatches, test_case: &String) {
         info!("Starting qemu exporter");
-        let path = "/var/lib/libvirt/scaphandre";
+        //let path = "/var/lib/libvirt/scaphandre";
         let cleaner_step = 30;
         let mut timer = time::Duration::from_secs(cleaner_step);
+        let path = format!("{}/{}", "/var/lib/libvirt/scaphandre", test_case);
+        info!("directory for storing {}", path);
         loop {
-            self.iteration(String::from(path));
+            self.iteration(String::from(&path));
             let step = time::Duration::from_secs(5);
             thread::sleep(step);
             if timer - step > time::Duration::from_millis(0) {

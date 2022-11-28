@@ -70,10 +70,6 @@ pub fn run(matches: ArgMatches) {
         scaphandre_header("qemu");
     }
 
-    let configurations = [
-        VMconfiguration{host_name: String::from("small"), vcpu: 4, ram: 2048}
-        ];
-
     let exporter_parameters;
     if let Some(qemu_exporter_parameters) = matches.subcommand_matches("qemu") {
         exporter_parameters = qemu_exporter_parameters.clone();
@@ -85,36 +81,35 @@ pub fn run(matches: ArgMatches) {
 
     let listener = TcpListener::bind("0.0.0.0:4444").unwrap();
 
-    
+    let mut stream = listener.accept().unwrap().0;
 
-    for configuration in configurations {
+    info!("Connection established\n");
+    loop {
+        let mut buf_reader = BufReader::new(&mut stream);
+        let mut read_line = String::new();
+        buf_reader.read_line(&mut read_line).unwrap();
+        info!("received: {}", read_line);
 
-        let mut stream = listener.accept().unwrap().0;
+        if read_line.eq("finished recording\n") {
+            info!("finished testing");
+            break;
+        } else if read_line.contains("startTestReq") {
+            info!("start recording");
 
-        info!("Connection established\n");
-        loop {
-            let mut buf_reader = BufReader::new(&mut stream);
-            let mut read_line = String::new();
-            buf_reader.read_line(&mut read_line).unwrap();
-            debug!("received: {}\n", read_line);
-        
-            if read_line.eq("finished recording\n") {
-                print!("finished testing");
-                break;
-            } else if read_line.eq("startTestReq\n") {
-                info!("start recording\n");
+            let mut test_case = String::from(read_line.split(" ").last().unwrap());
+            test_case.pop(); // remove trailing new line
+            info!("test case recording: {}", test_case);
 
-                stream.write(b"ack\n").unwrap();
-                stream.flush().unwrap();
+            stream.write(b"ack\n").unwrap();
+            stream.flush().unwrap();
 
-                exporter.run(&exporter_parameters, &configuration);
-                //record_vm(exporter, &configuration, exporter_parameters.clone());
+            exporter.run(&exporter_parameters, &test_case);
+            //record_vm(exporter, &configuration, exporter_parameters.clone());
 
-                stream.write(b"fin\n").unwrap();
-                stream.flush().unwrap();
-            } else {
-                panic!("recieved wrong package");
-            }
+            stream.write(b"fin\n").unwrap();
+            stream.flush().unwrap();
+        } else {
+            panic!("recieved wrong package");
         }
     }
 }

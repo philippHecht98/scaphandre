@@ -92,7 +92,7 @@ pub struct VMconfiguration {
 /// with the structs provided by the sensor.
 pub trait Exporter {
     /// Entry point for all Exporters
-    fn run(&mut self, parameters: &ArgMatches, configuration: &VMconfiguration);
+    fn run(&mut self, parameters: &ArgMatches, test_case: &String);
     /// Get the options passed via the command line
     fn get_options() -> Vec<clap::Arg<'static, 'static>>;
 }
