@@ -32,7 +32,7 @@ impl Exporter for QemuExporter {
         info!("directory for storing {}", path);
         loop {
             self.iteration(String::from(&path));
-            let step = time::Duration::from_secs(5);
+            let step = time::Duration::from_secs(1);
             thread::sleep(step);
             if timer - step > time::Duration::from_millis(0) {
                 timer -= step;
@@ -83,7 +83,6 @@ impl QemuExporter {
                     let previous = qp.get(1).unwrap();
                     let vm_name =
                         QemuExporter::get_vm_name_from_cmdline(&last.process.cmdline().unwrap());
-                    info!("Working on {:?}", vm_name);
                     let time_pdiff = last.total_time_jiffies() - previous.total_time_jiffies();
                     if let Some(time_tdiff) = &topo_stat_diff {
                         let first_domain_path = format!("{}/{}/intel-rapl:0:0", path, vm_name);
