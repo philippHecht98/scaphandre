@@ -345,7 +345,7 @@ impl Topology {
     /// between the last (in time) record from self.record_buffer and the previous one
     pub fn get_records_diff(&self) -> Option<Record> {
         let len = self.record_buffer.len();
-        if len > 2 {
+        if len >= 2 {
             let last = self.record_buffer.last().unwrap();
             let previous = self.record_buffer.get(len - 2).unwrap();
             let last_value = last.value.parse::<u64>().unwrap();
@@ -1093,7 +1093,11 @@ impl CPUStat {
             "CPUStat contains user {} nice {} system {} idle: {} irq {} softirq {} iowait {} steal {} guest_nice {} guest {}",
             user, nice, system, idle, irq, softirq, iowait, steal, guest_nice, guest
         );
-        user + nice + system + guest_nice + guest
+
+        let stale = (idle as f64) / ((user + nice + system + idle + irq + softirq) as f64);
+        info!("staleratio: {}", stale);
+
+        user + nice + system + idle + irq + softirq
     }
 }
 

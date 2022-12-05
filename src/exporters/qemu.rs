@@ -92,7 +92,7 @@ impl QemuExporter {
                                 Err(error) => panic!("Couldn't create {}. Got: {}", &path, error),
                             }
                         }
-                        // TODO: fix againt by using u64f
+                        
                         let tdiff = time_tdiff.total_time_jiffies();
                         trace!("Time_pdiff={} time_tdiff={}", time_pdiff.to_string(), tdiff);
                         let ratio = (time_pdiff as f64) / (tdiff as f64);
