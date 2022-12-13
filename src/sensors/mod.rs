@@ -573,6 +573,7 @@ impl RecordGenerator for CPUSocket {
     /// Returns a clone of this Record instance.
     fn refresh_record(&mut self) {
         if let Ok(record) = self.read_record_uj() {
+            debug!("read uj from socket: {:?}", record.value);
             self.record_buffer.push(record);
         }
 
@@ -1095,7 +1096,7 @@ impl CPUStat {
         );
 
         let stale = (idle as f64) / ((user + nice + system + idle + irq + softirq) as f64);
-        info!("staleratio: {}", stale);
+        debug!("staleratio: {}", stale);
 
         user + nice + system + idle + irq + softirq
     }

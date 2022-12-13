@@ -1,4 +1,5 @@
 use crate::exporters::Exporter;
+use crate::sensors::utils::current_system_time_since_epoch;
 use crate::sensors::{utils::ProcessRecord, Sensor, Topology};
 use std::{fs, io, thread, time};
 
@@ -26,25 +27,26 @@ impl Exporter for QemuExporter {
     fn run(&mut self, _parameters: &clap::ArgMatches, test_case: &String) {
         info!("Starting qemu exporter");
         //let path = "/var/lib/libvirt/scaphandre";
-        let cleaner_step = 30;
-        let mut timer = time::Duration::from_secs(cleaner_step);
-        let path = format!("{}/{}", "/var/lib/libvirt/scaphandre", test_case);
+        let cleaner_step = 10;
+        let path = format!("{}/{}", "/var/lib/libvirt/mount/scaphandre", test_case);
         info!("directory for storing {}", path);
-        loop {
+
+        let sleep_time = time::Duration::from_secs(1);
+        
+        // warm up machine
+        thread::sleep(time::Duration::from_secs(10));
+
+        let start_time = current_system_time_since_epoch();
+        for _ in 0..cleaner_step+1 {
             self.iteration(String::from(&path));
-            let step = time::Duration::from_secs(1);
-            thread::sleep(step);
-            if timer - step > time::Duration::from_millis(0) {
-                timer -= step;
-            } else {
-                debug!("store data");
-                self.topology
-                    .proc_tracker
-                    .clean_terminated_process_records_vectors();
-                timer = time::Duration::from_secs(cleaner_step);
-                break;
-            }
+            thread::sleep(sleep_time);
         }
+        let end_time = current_system_time_since_epoch();
+        debug!("store data");
+        info!("test duration: {:?}", end_time - start_time);
+        self.topology
+            .proc_tracker
+            .clean_terminated_process_records_vectors();
     }
 
     fn get_options() -> Vec<clap::Arg<'static, 'static>> {
@@ -62,13 +64,14 @@ impl QemuExporter {
     }
 
     /// Performs processing of metrics, using self.topology
-    pub fn iteration(&mut self, path: String) {
+    pub fn iteration(&mut self, path: String){
         trace!("path: {}", path);
         self.topology.refresh();
         let topo_uj_diff = self.topology.get_records_diff();
         let topo_stat_diff = self.topology.get_stats_diff();
         if let Some(topo_rec_uj) = topo_uj_diff {
             debug!("Got topo uj diff: {:?}", topo_rec_uj);
+            debug!("Got Joule of hole system: {:?}", topo_rec_uj.value.parse::<f64>().unwrap() / (1000 as f64 * 1000 as f64));
             let proc_tracker = self.topology.get_proc_tracker();
             let processes = proc_tracker.get_alive_processes();
             let qemu_processes = QemuExporter::filter_qemu_vm_processes(&processes);
@@ -77,7 +80,6 @@ impl QemuExporter {
                 qemu_processes.len()
             );
             for qp in qemu_processes {
-                //info!("Working on {:?}", qp);
                 if qp.len() > 2 {
                     let last = qp.first().unwrap();
                     let previous = qp.get(1).unwrap();
@@ -88,7 +90,7 @@ impl QemuExporter {
                         let first_domain_path = format!("{}/{}/intel-rapl:0:0", path, vm_name);
                         if fs::read_dir(&first_domain_path).is_err() {
                             match fs::create_dir_all(&first_domain_path) {
-                                Ok(_) => info!("Created {} folder.", &path),
+                                Ok(_) => debug!("Created {} folder.", &path),
                                 Err(error) => panic!("Couldn't create {}. Got: {}", &path, error),
                             }
                         }
@@ -96,12 +98,15 @@ impl QemuExporter {
                         let tdiff = time_tdiff.total_time_jiffies();
                         trace!("Time_pdiff={} time_tdiff={}", time_pdiff.to_string(), tdiff);
                         let ratio = (time_pdiff as f64) / (tdiff as f64);
-                        trace!("Ratio is {}", ratio.to_string());
+                        info!("messed {} uJ difference to last timestamp", topo_rec_uj.value.parse::<f64>().unwrap());
+                        info!("Ratio is {}", ratio.to_string());
                         let uj_to_add = ratio * topo_rec_uj.value.parse::<f64>().unwrap();
+                        
+                        info!("adding {} uJ", uj_to_add); 
                         trace!("Adding {} uJ", uj_to_add);
                         let complete_path = format!("{}/{}/intel-rapl:0", path, vm_name);
                         if let Ok(result) =
-                            QemuExporter::add_or_create(&complete_path, uj_to_add as u64)
+                            QemuExporter::add_or_create_energy_file(&complete_path, uj_to_add)
                         {
                             trace!("{:?}", result);
                             debug!("Updated {}", complete_path);
@@ -129,20 +134,31 @@ impl QemuExporter {
     /// Either creates an energy_uj file (as the ones managed by powercap kernel module)
     /// in 'path' and adds 'uj_value' to its numerical content, or simply performs the
     /// addition if the file exists.
-    fn add_or_create(path: &str, uj_value: u64) -> io::Result<()> {
-        let mut content = 0;
+    fn add_or_create_energy_file(path: &str, uj_value: f64) -> io::Result<()> {
+        let mut content = 0.0;
         if fs::read_dir(path).is_err() {
             match fs::create_dir_all(path) {
-                Ok(_) => info!("Created {} folder.", path),
+                Ok(_) => debug!("Created {} folder.", path),
                 Err(error) => panic!("Couldn't create {}. Got: {}", path, error),
             }
         }
         let file_path = format!("{}/{}", path, "energy_uj");
         if let Ok(file) = fs::read_to_string(&file_path) {
-            content = file.parse::<u64>().unwrap();
+            content = file.parse::<f64>().unwrap();
             content += uj_value;
         }
         fs::write(file_path, content.to_string())
+    }
+
+    fn add_or_create_duration_file(path: &str, duartion: f64) -> io::Result<()> {
+        if fs::read_dir(path).is_err() {
+            match fs::create_dir_all(path) {
+                Ok(_) => debug!("Created {} folder.", path),
+                Err(error) => panic!("Couldn't create {}. Got: {}", path, error),
+            }
+        }
+        let file_path = format!("{}/{}", path, "energy_uj");
+        fs::write(file_path, duartion.to_string())
     }
 
     /// Filters 'processes' to match processes that look like qemu/kvm guest processes.
@@ -150,7 +166,6 @@ impl QemuExporter {
     fn filter_qemu_vm_processes(processes: &[&Vec<ProcessRecord>]) -> Vec<Vec<ProcessRecord>> {
         let mut qemu_processes: Vec<Vec<ProcessRecord>> = vec![];
         trace!("Got {} processes to filter.", processes.len());
-        // TODO: check for cmd line hostname and compare with keyset
         for vecp in processes.iter() {
             if !vecp.is_empty() {
                 if let Some(pr) = vecp.get(0) {
