@@ -76,12 +76,6 @@ impl fmt::Debug for MetricValueType {
     }
 }
 
-pub struct VMconfiguration {
-    pub host_name: String, 
-    pub vcpu: u64, 
-    pub ram: u64
-}
-
 /// An Exporter is what tells scaphandre when to collect metrics and how to export
 /// or expose them.
 /// Its basic role is to instanciate a Sensor, get the data the sensor has to offer

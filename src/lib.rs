@@ -9,7 +9,6 @@ pub mod exporters;
 pub mod sensors;
 use clap::ArgMatches;
 use colored::*;
-use exporters::VMconfiguration;
 use exporters::{
     qemu::QemuExporter, Exporter
 };
