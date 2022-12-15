@@ -145,7 +145,7 @@ impl Exporter for QemuExporter {
         test_case.stop_recording();
         
         debug!("store data");
-        debug!(test_case);
+        debug!("{}", test_case);
         test_case.store_test_data();
 
         self.topology
