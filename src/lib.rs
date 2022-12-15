@@ -87,7 +87,7 @@ pub fn run(matches: ArgMatches) {
         let mut buf_reader = BufReader::new(&mut stream);
         let mut read_line = String::new();
         buf_reader.read_line(&mut read_line).unwrap();
-        info!("received: {}", read_line);
+        debug!("received: {}", read_line);
 
         if read_line.eq("finished recording\n") {
             info!("finished testing");
