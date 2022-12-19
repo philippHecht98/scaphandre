@@ -87,13 +87,13 @@ impl TestCase {
         for vm in self.vms.clone().iter() {
             // write energy consumption
             add_or_create_file_with_value(
-                format!("{}/{}", self.store_base_path, *vm.0), 
+                format!("{}/{}/{}", self.store_base_path, *vm.0, self.test_name), 
                 String::from("consumed_watt"), 
                 self.get_watt_consumed_by_vm(vm.0.clone()));
 
             // write avg temp
             add_or_create_file_with_value(
-                format!("{}/{}", self.store_base_path, *vm.0), 
+                format!("{}/{}/{}", self.store_base_path, *vm.0, self.test_name), 
                 String::from("avg_temp"), 
                 self.get_avg_temp());
         }
@@ -130,7 +130,7 @@ impl Exporter for QemuExporter {
         let path = format!("{}/{}", "/var/lib/libvirt/mount/scaphandre", test_case_name);
         info!("directory for storing {}", path);
 
-        let mut test_case = TestCase::new(String::clone(test_case_name), path);
+        let mut test_case = TestCase::new(String::clone(test_case_name), String::from("/var/lib/libvirt/mount/scaphandre"));
         let sleep_time = time::Duration::from_secs(1);
 
         // warm up machine
